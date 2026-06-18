@@ -27,7 +27,16 @@
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script>
+        // Forzar a Babel a utilizar el compilador clásico de React (evita el error de 'import')
+        Babel.registerPreset('react-classic', {
+            presets: [
+                [Babel.availablePresets['react'], { runtime: 'classic' }]
+            ]
+        });
+    </script>
+
+    <script type="text/babel" data-presets="react-classic,env">
         // ==========================================
         // CONFIGURACIÓN API
         // ==========================================
@@ -378,7 +387,6 @@
             }, [activeTab]);
 
             React.useEffect(() => {
-                // Initialize Donut Chart
                 if(data && chartDonutRef.current && activeTab === 'dashboard') {
                     if(donutInstance.current) donutInstance.current.destroy();
                     donutInstance.current = new Chart(chartDonutRef.current.getContext('2d'), {
@@ -395,7 +403,6 @@
                     });
                 }
                 
-                // Initialize Bar Chart
                 if(data && chartBarRef.current && activeTab === 'dashboard' && data.avancePasillos) {
                     if(barInstance.current) barInstance.current.destroy();
                     const pasillosLabels = data.avancePasillos.map(p => p.pasillo);
@@ -443,7 +450,6 @@
                         {activeTab === 'dashboard' ? (
                             loading && !data ? <div className="text-center p-10">Cargando Dashboard...</div> : (
                             <>
-                                {/* KPIs */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                                     <div className="dashboard-card border-l-4 border-red-500">
                                         <div className="text-gray-500 text-sm font-bold">PENDIENTES</div>
@@ -464,7 +470,6 @@
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    {/* Gráfico Donut */}
                                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-1 h-80 flex flex-col">
                                         <h3 className="font-bold text-gray-700 mb-4">Estado Global</h3>
                                         <div className="relative flex-1">
@@ -472,7 +477,6 @@
                                         </div>
                                     </div>
 
-                                    {/* Gráfico de Barras por Pasillo */}
                                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 col-span-2 h-80 flex flex-col">
                                         <h3 className="font-bold text-gray-700 mb-4">Avance por Pasillo</h3>
                                         <div className="relative flex-1">
@@ -482,7 +486,6 @@
                                 </div>
                                 
                                 <div className="grid grid-cols-1 gap-6 mt-6">
-                                    {/* Ranking Pickers */}
                                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                                         <h3 className="font-bold text-gray-700 mb-4">Top 10 Pickers (Terminadas)</h3>
                                         <div className="overflow-x-auto">
@@ -510,7 +513,6 @@
                                         </div>
                                     </div>
 
-                                    {/* Avance por Supervisor */}
                                     <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
                                         <h3 className="font-bold text-gray-700 mb-4">Avance por Supervisor</h3>
                                         <div className="overflow-x-auto">
