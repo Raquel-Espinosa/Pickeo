@@ -54,12 +54,16 @@
         const hashPassword = (pwd) => CryptoJS.SHA256(pwd).toString();
         
         const copyToClipboard = (text) => {
-            let textArea = document.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
-            document.body.appendChild(textArea); textArea.focus(); textArea.select();
-            try { document.execCommand('copy'); } catch (err) {}
-            textArea.remove();
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).catch(()=>{});
+            } else {
+                let textArea = document.createElement("textarea");
+                textArea.value = text;
+                textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
+                document.body.appendChild(textArea); textArea.focus(); textArea.select();
+                try { document.execCommand('copy'); } catch (err) {}
+                textArea.remove();
+            }
         };
 
         // ==========================================
@@ -133,11 +137,15 @@
             const [loading, setLoading] = React.useState(false);
             const [copied, setCopied] = React.useState(false);
             const [stats, setStats] = React.useState({ entregas: 0, umbs: 0 });
+            const [history, setHistory] = React.useState([]);
 
             const fetchStats = async () => {
                 try {
                     const res = await apiCall('getPickerStats', { numEmpleado: user.numEmpleado });
-                    if (res.success) setStats(res.stats);
+                    if (res.success) {
+                        setStats(res.stats);
+                        if(res.history) setHistory(res.history);
+                    }
                 } catch(e) {}
             };
 
@@ -253,6 +261,43 @@
                             </>
                         )}
                     </div>
+
+                    {/* Historial Reciente */}
+                    {history.length > 0 && (
+                        <div className="p-4 bg-gray-200 border-t-2 border-gray-300 shadow-inner">
+                            <h3 className="text-gray-600 font-bold mb-3 flex items-center gap-2">
+                                <i className="ph ph-clock-counter-clockwise"></i> ÚLTIMAS ASIGNACIONES
+                            </h3>
+                            <div className="flex flex-col gap-2">
+                                {history.map((item, idx) => (
+                                    <div key={idx} className="bg-white p-3 rounded-lg shadow-sm flex justify-between items-center border border-gray-300">
+                                        <div>
+                                            <div className="font-black text-gray-800 text-xl">{item.entrega}</div>
+                                            <div className="text-sm text-gray-500 font-bold">Bahía: {item.bahia}</div>
+                                        </div>
+                                        <button 
+                                            onClick={(e) => { 
+                                                copyToClipboard(item.entrega); 
+                                                const btn = e.currentTarget;
+                                                const originalHtml = btn.innerHTML;
+                                                btn.innerHTML = '<i class="ph ph-check text-2xl"></i>';
+                                                btn.classList.replace('text-blue-600', 'text-green-600');
+                                                btn.classList.replace('bg-blue-100', 'bg-green-100');
+                                                setTimeout(() => {
+                                                    btn.innerHTML = originalHtml;
+                                                    btn.classList.replace('text-green-600', 'text-blue-600');
+                                                    btn.classList.replace('bg-green-100', 'bg-blue-100');
+                                                }, 1500);
+                                            }} 
+                                            className="bg-blue-100 text-blue-600 px-4 py-3 rounded-lg font-bold text-sm active:scale-90 transition-transform flex items-center justify-center"
+                                        >
+                                            <i className="ph ph-copy text-2xl"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
