@@ -10,6 +10,8 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Plugin para ver números encima de las gráficas -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
@@ -22,6 +24,10 @@
         .btn-warning { @apply bg-yellow-500 text-white active:bg-yellow-700; }
         .card-rf { @apply bg-white p-6 rounded-2xl shadow-xl border-2 border-gray-200; }
         .dashboard-card { @apply bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center; }
+        
+        /* Ocultar barra de desplazamiento en la lista del historial pero permitir scroll */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -37,6 +43,9 @@
     </script>
 
     <script type="text/babel" data-presets="react-classic,env">
+        // Forzar registro del Plugin de DataLabels para ChartJS
+        Chart.register(ChartDataLabels);
+
         // ==========================================
         // CONFIGURACIÓN API
         // ==========================================
@@ -54,16 +63,12 @@
         const hashPassword = (pwd) => CryptoJS.SHA256(pwd).toString();
         
         const copyToClipboard = (text) => {
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(text).catch(()=>{});
-            } else {
-                let textArea = document.createElement("textarea");
-                textArea.value = text;
-                textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
-                document.body.appendChild(textArea); textArea.focus(); textArea.select();
-                try { document.execCommand('copy'); } catch (err) {}
-                textArea.remove();
-            }
+            let textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed"; textArea.style.left = "-999999px"; textArea.style.top = "-999999px";
+            document.body.appendChild(textArea); textArea.focus(); textArea.select();
+            try { document.execCommand('copy'); } catch (err) {}
+            textArea.remove();
         };
 
         // ==========================================
@@ -136,16 +141,14 @@
             const [delivery, setDelivery] = React.useState(initialDelivery);
             const [loading, setLoading] = React.useState(false);
             const [copied, setCopied] = React.useState(false);
-            const [stats, setStats] = React.useState({ entregas: 0, umbs: 0 });
-            const [history, setHistory] = React.useState([]);
+            // Agregamos history al estado inicial
+            const [stats, setStats] = React.useState({ entregas: 0, umbs: 0, history: [] });
+            const [copiedHist, setCopiedHist] = React.useState(null);
 
             const fetchStats = async () => {
                 try {
                     const res = await apiCall('getPickerStats', { numEmpleado: user.numEmpleado });
-                    if (res.success) {
-                        setStats(res.stats);
-                        if(res.history) setHistory(res.history);
-                    }
+                    if (res.success) setStats(res.stats);
                 } catch(e) {}
             };
 
@@ -164,6 +167,12 @@
             };
 
             const handleCopy = () => { if(delivery) { copyToClipboard(delivery.entrega); setCopied(true); } };
+
+            const handleCopyHistory = (entrega) => {
+                copyToClipboard(entrega);
+                setCopiedHist(entrega);
+                setTimeout(() => setCopiedHist(null), 1500); // Check visual temporal
+            };
 
             const handleNext = async () => {
                 if(delivery) {
@@ -215,8 +224,8 @@
             }
 
             return (
-                <div className="min-h-screen flex flex-col bg-gray-100">
-                    <div className="bg-gray-800 text-white p-3 flex justify-between items-center shadow-md">
+                <div className="min-h-screen flex flex-col bg-gray-100 h-screen overflow-hidden">
+                    <div className="bg-gray-800 text-white p-3 flex justify-between items-center shadow-md shrink-0">
                         <div>
                             <div className="text-xl font-bold">PASILLO: <span className="text-yellow-400 text-2xl">{pasillo}</span></div>
                             <div className="text-sm text-gray-300 mt-1">
@@ -226,7 +235,7 @@
                         <button onClick={onExitAisle} className="bg-gray-600 px-3 py-2 rounded text-sm font-bold">SALIR</button>
                     </div>
 
-                    <div className="flex-1 p-4 flex flex-col justify-center gap-4">
+                    <div className="p-4 flex flex-col justify-center gap-4 shrink-0 mt-4">
                         <div className="card-rf bg-blue-50 border-blue-200 border-4 relative">
                             <div className="text-sm text-blue-800 font-bold mb-1">ENTREGA</div>
                             <div className="text-5xl font-black text-blue-900 tracking-wider text-center">{delivery.entrega}</div>
@@ -244,14 +253,14 @@
                         </div>
                     </div>
 
-                    <div className="p-4 bg-white border-t-2 border-gray-200 flex flex-col gap-3">
+                    <div className="p-4 flex flex-col gap-3 shrink-0">
                         {!copied ? (
                             <button onClick={handleCopy} className="btn-rf btn-primary py-6 text-2xl">
                                 <i className="ph ph-copy"></i> COPIAR ENTREGA
                             </button>
                         ) : (
                             <>
-                                <button onClick={handleNext} disabled={loading} className={`btn-rf btn-success py-6 text-2xl ${loading ? 'opacity-50' : ''}`}>
+                                <button onClick={handleNext} disabled={loading} className={`btn-rf btn-success py-6 text-2xl shadow-lg shadow-green-500/50 ${loading ? 'opacity-50' : ''}`}>
                                     {loading ? <i className="ph ph-spinner ph-spin"></i> : <i className="ph ph-check-square-offset"></i>} 
                                     SIGUIENTE ENTREGA
                                 </button>
@@ -262,36 +271,24 @@
                         )}
                     </div>
 
-                    {/* Historial Reciente */}
-                    {history.length > 0 && (
-                        <div className="p-4 bg-gray-200 border-t-2 border-gray-300 shadow-inner">
-                            <h3 className="text-gray-600 font-bold mb-3 flex items-center gap-2">
-                                <i className="ph ph-clock-counter-clockwise"></i> ÚLTIMAS ASIGNACIONES
+                    {/* NUEVO: Historial de Entregas al final (Scrollable si son muchas) */}
+                    {stats.history && stats.history.length > 0 && (
+                        <div className="flex-1 overflow-y-auto no-scrollbar bg-white border-t-2 border-gray-200 p-4 pb-10 rounded-t-3xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
+                            <h3 className="font-bold text-gray-700 mb-3 text-lg flex items-center gap-2">
+                                <i className="ph ph-clock-counter-clockwise"></i> Últimas Completadas
                             </h3>
-                            <div className="flex flex-col gap-2">
-                                {history.map((item, idx) => (
-                                    <div key={idx} className="bg-white p-3 rounded-lg shadow-sm flex justify-between items-center border border-gray-300">
+                            <div className="space-y-3">
+                                {stats.history.map((h, i) => (
+                                    <div key={i} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl border border-gray-200 shadow-sm">
                                         <div>
-                                            <div className="font-black text-gray-800 text-xl">{item.entrega}</div>
-                                            <div className="text-sm text-gray-500 font-bold">Bahía: {item.bahia}</div>
+                                            <div className="font-bold text-blue-900 text-xl">{h.entrega}</div>
+                                            <div className="text-sm text-gray-500 font-medium">Bahía: {h.bahia} | UMB: {h.ctdUMB}</div>
                                         </div>
                                         <button 
-                                            onClick={(e) => { 
-                                                copyToClipboard(item.entrega); 
-                                                const btn = e.currentTarget;
-                                                const originalHtml = btn.innerHTML;
-                                                btn.innerHTML = '<i class="ph ph-check text-2xl"></i>';
-                                                btn.classList.replace('text-blue-600', 'text-green-600');
-                                                btn.classList.replace('bg-blue-100', 'bg-green-100');
-                                                setTimeout(() => {
-                                                    btn.innerHTML = originalHtml;
-                                                    btn.classList.replace('text-green-600', 'text-blue-600');
-                                                    btn.classList.replace('bg-green-100', 'bg-blue-100');
-                                                }, 1500);
-                                            }} 
-                                            className="bg-blue-100 text-blue-600 px-4 py-3 rounded-lg font-bold text-sm active:scale-90 transition-transform flex items-center justify-center"
+                                            onClick={() => handleCopyHistory(h.entrega)} 
+                                            className={`p-3 rounded-lg flex items-center justify-center transition-colors ${copiedHist === h.entrega ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700 active:bg-blue-200'}`}
                                         >
-                                            <i className="ph ph-copy text-2xl"></i>
+                                            <i className={`ph ${copiedHist === h.entrega ? 'ph-check-bold' : 'ph-copy'} text-2xl`}></i>
                                         </button>
                                     </div>
                                 ))}
@@ -408,6 +405,9 @@
             const [loading, setLoading] = React.useState(true);
             const [activeTab, setActiveTab] = React.useState('dashboard');
             
+            const [supervisorFiltro, setSupervisorFiltro] = React.useState('Todos');
+            const [listaSupervisores, setListaSupervisores] = React.useState([]);
+            
             const chartDonutRef = React.useRef(null);
             const chartBarRef = React.useRef(null);
             
@@ -417,8 +417,11 @@
             const loadData = async () => {
                 setLoading(true);
                 try {
-                    const res = await apiCall('getDashboardData');
-                    if(res.success) setData(res.data);
+                    const res = await apiCall('getDashboardData', { supervisor: supervisorFiltro });
+                    if(res.success) {
+                        setData(res.data);
+                        if(res.data.listaSupervisores) setListaSupervisores(res.data.listaSupervisores);
+                    }
                 } catch(e) {}
                 setLoading(false);
             };
@@ -429,7 +432,7 @@
                     const interval = setInterval(loadData, 60000);
                     return () => clearInterval(interval);
                 }
-            }, [activeTab]);
+            }, [activeTab, supervisorFiltro]);
 
             React.useEffect(() => {
                 if(data && chartDonutRef.current && activeTab === 'dashboard') {
@@ -444,28 +447,49 @@
                                 borderWidth: 0 
                             }]
                         },
-                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                        options: { 
+                            responsive: true, maintainAspectRatio: false, 
+                            plugins: { 
+                                legend: { position: 'bottom' },
+                                datalabels: { 
+                                    color: '#ffffff', font: { weight: 'bold', size: 16 },
+                                    formatter: (value) => value > 0 ? value : '' 
+                                }
+                            } 
+                        }
                     });
                 }
                 
                 if(data && chartBarRef.current && activeTab === 'dashboard' && data.avancePasillos) {
                     if(barInstance.current) barInstance.current.destroy();
-                    const pasillosLabels = data.avancePasillos.map(p => p.pasillo);
+                    
+                    // NUEVO: Ordenamiento Inteligente (Natural Sort) para los pasillos
+                    const pasillosOrdenados = [...data.avancePasillos].sort((a, b) => 
+                        String(a.pasillo).localeCompare(String(b.pasillo), undefined, { numeric: true, sensitivity: 'base' })
+                    );
+
+                    const pasillosLabels = pasillosOrdenados.map(p => p.pasillo);
                     barInstance.current = new Chart(chartBarRef.current.getContext('2d'), {
                         type: 'bar',
                         data: {
                             labels: pasillosLabels,
                             datasets: [
-                                { label: 'Terminadas', data: data.avancePasillos.map(p => p.terminadas), backgroundColor: '#22c55e' },
-                                { label: 'Asignadas', data: data.avancePasillos.map(p => p.asignadas), backgroundColor: '#3b82f6' },
-                                { label: 'Pendientes', data: data.avancePasillos.map(p => p.pendientes), backgroundColor: '#ef4444' }
+                                { label: 'Terminadas', data: pasillosOrdenados.map(p => p.terminadas), backgroundColor: '#22c55e' },
+                                { label: 'Asignadas', data: pasillosOrdenados.map(p => p.asignadas), backgroundColor: '#3b82f6' },
+                                { label: 'Pendientes', data: pasillosOrdenados.map(p => p.pendientes), backgroundColor: '#ef4444' }
                             ]
                         },
                         options: { 
-                            responsive: true, 
-                            maintainAspectRatio: false, 
+                            responsive: true, maintainAspectRatio: false, 
                             scales: { x: { stacked: true }, y: { stacked: true } },
-                            plugins: { legend: { position: 'bottom' } }
+                            plugins: { 
+                                legend: { position: 'bottom' },
+                                datalabels: {
+                                    color: '#ffffff', font: { weight: 'bold' },
+                                    anchor: 'center', align: 'center',
+                                    formatter: (value) => value > 0 ? value : ''
+                                }
+                            }
                         }
                     });
                 }
@@ -493,8 +517,23 @@
 
                     <div className="p-6 flex-1 overflow-auto">
                         {activeTab === 'dashboard' ? (
-                            loading && !data ? <div className="text-center p-10">Cargando Dashboard...</div> : (
                             <>
+                                <div className="bg-white p-4 mb-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <i className="ph ph-funnel text-2xl text-blue-600"></i>
+                                        <label className="font-bold text-gray-700">Filtro por Supervisor:</label>
+                                        <select
+                                            className="p-2 border-2 border-gray-300 rounded-lg font-bold text-gray-700 outline-none focus:border-blue-500"
+                                            value={supervisorFiltro}
+                                            onChange={(e) => setSupervisorFiltro(e.target.value)}
+                                        >
+                                            <option value="Todos">Todos los Supervisores</option>
+                                            {listaSupervisores.map(s => <option key={s} value={s}>{s}</option>)}
+                                        </select>
+                                    </div>
+                                    {loading && <div className="text-blue-600 font-bold animate-pulse"><i className="ph ph-spinner ph-spin"></i> Filtrando...</div>}
+                                </div>
+
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
                                     <div className="dashboard-card border-l-4 border-red-500">
                                         <div className="text-gray-500 text-sm font-bold">PENDIENTES</div>
@@ -597,7 +636,6 @@
                                     </div>
                                 </div>
                             </>
-                            )
                         ) : (
                             <UserManagement />
                         )}
