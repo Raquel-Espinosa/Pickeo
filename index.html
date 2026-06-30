@@ -10,7 +10,6 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Plugin para ver números encima de las gráficas -->
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
@@ -24,8 +23,6 @@
         .btn-warning { @apply bg-yellow-500 text-white active:bg-yellow-700; }
         .card-rf { @apply bg-white p-6 rounded-2xl shadow-xl border-2 border-gray-200; }
         .dashboard-card { @apply bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center items-center; }
-        
-        /* Ocultar barra de desplazamiento en la lista del historial pero permitir scroll */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -34,7 +31,6 @@
     <div id="root"></div>
 
     <script>
-        // Forzar a Babel a utilizar el compilador clásico de React (evita el error de 'import')
         Babel.registerPreset('react-classic', {
             presets: [
                 [Babel.availablePresets['react'], { runtime: 'classic' }]
@@ -43,7 +39,6 @@
     </script>
 
     <script type="text/babel" data-presets="react-classic,env">
-        // Forzar registro del Plugin de DataLabels para ChartJS
         Chart.register(ChartDataLabels);
 
         // ==========================================
@@ -141,7 +136,6 @@
             const [delivery, setDelivery] = React.useState(initialDelivery);
             const [loading, setLoading] = React.useState(false);
             const [copied, setCopied] = React.useState(false);
-            // Agregamos history al estado inicial
             const [stats, setStats] = React.useState({ entregas: 0, umbs: 0, history: [] });
             const [copiedHist, setCopiedHist] = React.useState(null);
 
@@ -171,7 +165,7 @@
             const handleCopyHistory = (entrega) => {
                 copyToClipboard(entrega);
                 setCopiedHist(entrega);
-                setTimeout(() => setCopiedHist(null), 1500); // Check visual temporal
+                setTimeout(() => setCopiedHist(null), 1500);
             };
 
             const handleNext = async () => {
@@ -271,7 +265,6 @@
                         )}
                     </div>
 
-                    {/* NUEVO: Historial de Entregas al final (Scrollable si son muchas) */}
                     {stats.history && stats.history.length > 0 && (
                         <div className="flex-1 overflow-y-auto no-scrollbar bg-white border-t-2 border-gray-200 p-4 pb-10 rounded-t-3xl shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)]">
                             <h3 className="font-bold text-gray-700 mb-3 text-lg flex items-center gap-2">
@@ -406,7 +399,9 @@
             const [activeTab, setActiveTab] = React.useState('dashboard');
             
             const [supervisorFiltro, setSupervisorFiltro] = React.useState('Todos');
+            const [pasilloFiltro, setPasilloFiltro] = React.useState('Todos');
             const [listaSupervisores, setListaSupervisores] = React.useState([]);
+            const [listaPasillos, setListaPasillos] = React.useState([]);
             
             const chartDonutRef = React.useRef(null);
             const chartBarRef = React.useRef(null);
@@ -417,10 +412,11 @@
             const loadData = async () => {
                 setLoading(true);
                 try {
-                    const res = await apiCall('getDashboardData', { supervisor: supervisorFiltro });
+                    const res = await apiCall('getDashboardData', { supervisor: supervisorFiltro, pasillo: pasilloFiltro });
                     if(res.success) {
                         setData(res.data);
                         if(res.data.listaSupervisores) setListaSupervisores(res.data.listaSupervisores);
+                        if(res.data.listaPasillos) setListaPasillos(res.data.listaPasillos);
                     }
                 } catch(e) {}
                 setLoading(false);
@@ -432,7 +428,7 @@
                     const interval = setInterval(loadData, 60000);
                     return () => clearInterval(interval);
                 }
-            }, [activeTab, supervisorFiltro]);
+            }, [activeTab, supervisorFiltro, pasilloFiltro]);
 
             React.useEffect(() => {
                 if(data && chartDonutRef.current && activeTab === 'dashboard') {
@@ -462,21 +458,16 @@
                 
                 if(data && chartBarRef.current && activeTab === 'dashboard' && data.avancePasillos) {
                     if(barInstance.current) barInstance.current.destroy();
-                    
-                    // NUEVO: Ordenamiento Inteligente (Natural Sort) para los pasillos
-                    const pasillosOrdenados = [...data.avancePasillos].sort((a, b) => 
-                        String(a.pasillo).localeCompare(String(b.pasillo), undefined, { numeric: true, sensitivity: 'base' })
-                    );
-
-                    const pasillosLabels = pasillosOrdenados.map(p => p.pasillo);
+                    // Ordenamiento Natural de pasillos integrado desde el backend
+                    const pasillosLabels = data.avancePasillos.map(p => p.pasillo);
                     barInstance.current = new Chart(chartBarRef.current.getContext('2d'), {
                         type: 'bar',
                         data: {
                             labels: pasillosLabels,
                             datasets: [
-                                { label: 'Terminadas', data: pasillosOrdenados.map(p => p.terminadas), backgroundColor: '#22c55e' },
-                                { label: 'Asignadas', data: pasillosOrdenados.map(p => p.asignadas), backgroundColor: '#3b82f6' },
-                                { label: 'Pendientes', data: pasillosOrdenados.map(p => p.pendientes), backgroundColor: '#ef4444' }
+                                { label: 'Terminadas', data: data.avancePasillos.map(p => p.terminadas), backgroundColor: '#22c55e' },
+                                { label: 'Asignadas', data: data.avancePasillos.map(p => p.asignadas), backgroundColor: '#3b82f6' },
+                                { label: 'Pendientes', data: data.avancePasillos.map(p => p.pendientes), backgroundColor: '#ef4444' }
                             ]
                         },
                         options: { 
@@ -506,11 +497,11 @@
                         </button>
                     </div>
 
-                    <div className="bg-white border-b flex px-6">
-                        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
+                    <div className="bg-white border-b flex px-6 overflow-x-auto">
+                        <button onClick={() => setActiveTab('dashboard')} className={`px-4 py-3 font-bold border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
                             <i className="ph ph-chart-pie-slice mr-2"></i> Dashboard
                         </button>
-                        <button onClick={() => setActiveTab('usuarios')} className={`px-4 py-3 font-bold border-b-2 ${activeTab === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
+                        <button onClick={() => setActiveTab('usuarios')} className={`px-4 py-3 font-bold border-b-2 whitespace-nowrap ${activeTab === 'usuarios' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500'}`}>
                             <i className="ph ph-users mr-2"></i> Gestión de Usuarios
                         </button>
                     </div>
@@ -518,18 +509,32 @@
                     <div className="p-6 flex-1 overflow-auto">
                         {activeTab === 'dashboard' ? (
                             <>
-                                <div className="bg-white p-4 mb-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <i className="ph ph-funnel text-2xl text-blue-600"></i>
-                                        <label className="font-bold text-gray-700">Filtro por Supervisor:</label>
-                                        <select
-                                            className="p-2 border-2 border-gray-300 rounded-lg font-bold text-gray-700 outline-none focus:border-blue-500"
-                                            value={supervisorFiltro}
-                                            onChange={(e) => setSupervisorFiltro(e.target.value)}
-                                        >
-                                            <option value="Todos">Todos los Supervisores</option>
-                                            {listaSupervisores.map(s => <option key={s} value={s}>{s}</option>)}
-                                        </select>
+                                <div className="bg-white p-4 mb-6 rounded-xl shadow-sm border border-gray-100 flex flex-wrap justify-between items-center gap-4">
+                                    <div className="flex flex-wrap items-center gap-6">
+                                        <div className="flex items-center gap-2">
+                                            <i className="ph ph-funnel text-2xl text-blue-600"></i>
+                                            <label className="font-bold text-gray-700">Supervisor:</label>
+                                            <select
+                                                className="p-2 border-2 border-gray-300 rounded-lg font-bold text-gray-700 outline-none focus:border-blue-500"
+                                                value={supervisorFiltro}
+                                                onChange={(e) => setSupervisorFiltro(e.target.value)}
+                                            >
+                                                <option value="Todos">Todos</option>
+                                                {listaSupervisores.map(s => <option key={s} value={s}>{s}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <i className="ph ph-map-pin text-2xl text-red-600"></i>
+                                            <label className="font-bold text-gray-700">Pasillo:</label>
+                                            <select
+                                                className="p-2 border-2 border-gray-300 rounded-lg font-bold text-gray-700 outline-none focus:border-red-500"
+                                                value={pasilloFiltro}
+                                                onChange={(e) => setPasilloFiltro(e.target.value)}
+                                            >
+                                                <option value="Todos">Todos</option>
+                                                {listaPasillos.map(p => <option key={p} value={p}>{p}</option>)}
+                                            </select>
+                                        </div>
                                     </div>
                                     {loading && <div className="text-blue-600 font-bold animate-pulse"><i className="ph ph-spinner ph-spin"></i> Filtrando...</div>}
                                 </div>
